@@ -22,7 +22,7 @@ if __name__ == '__main__' and (__package__ is None or __package__ == ''):
 
 from .utils import *
 from .stats import stats
-from .config import proxy_config, parse_dc_ip_list, start_cfproxy_domain_refresh
+from .config import proxy_config, parse_dc_ip_list, start_cfproxy_domain_refresh, coerce_domain_list
 from .bridge import MsgSplitter, CryptoCtx, do_fallback, bridge_ws_reencrypt
 from .raw_websocket import RawWebSocket, WsHandshakeError, set_sock_opts
 from .fake_tls import proxy_to_masking_domain, verify_client_hello, build_server_hello, FakeTlsStream, TLS_RECORD_HANDSHAKE
@@ -439,9 +439,9 @@ async def _run(stop_event: Optional[asyncio.Event] = None):
     _client_tasks.clear()
 
     if proxy_config.fallback_cfproxy:
-        user = proxy_config.cfproxy_user_domain
+        user = proxy_config.cfproxy_user_domains
         if user:
-            balancer.update_domains_list([user])
+            balancer.update_domains_list(user)
         else:
             start_cfproxy_domain_refresh()
 
@@ -484,11 +484,11 @@ async def _run(stop_event: Optional[asyncio.Event] = None):
         ip = proxy_config.dc_redirects.get(dc)
         log.info("    DC%d: %s", dc, ip)
     if proxy_config.fallback_cfproxy:
-        user_domain = "user" if proxy_config.cfproxy_user_domain else "auto"
+        user_domain = "user" if proxy_config.cfproxy_user_domains else "auto"
         log.info("  CF proxy:      enabled (%s)", user_domain)
-    if proxy_config.cfproxy_worker_domain:
+    if proxy_config.cfproxy_worker_domains:
         log.info("  CF worker:     enabled (%s)",
-                 proxy_config.cfproxy_worker_domain)
+                 ", ".join(proxy_config.cfproxy_worker_domains))
     log.info("=" * 60)
     log.info("  Connect:")
     if ftls:
@@ -574,13 +574,15 @@ def main():
                     help='Socket send/recv buffer size in KB (default 256)')
     ap.add_argument('--pool-size', type=int, default=4, metavar='N',
                     help='WS connection pool size per DC (default 4, min 0)')
-    ap.add_argument('--cfproxy-domain', type=str, default='',
+    ap.add_argument('--cfproxy-domain', action='append', default=None,
                     metavar='DOMAIN',
-                    help='User defined Cloudflare-proxied domain for WS fallback')
-    ap.add_argument('--cfproxy-worker-domain', type=str, default='',
+                    help='User defined Cloudflare-proxied domain for WS fallback '
+                         '(repeatable for multiple domains)')
+    ap.add_argument('--cfproxy-worker-domain', action='append', default=None,
                     metavar='DOMAIN',
                     help='Cloudflare Worker domain for WS fallback '
-                         '(tried before other fallback methods)')
+                         '(tried before other fallback methods, '
+                         'repeatable for multiple domains)')
     ap.add_argument('--no-cfproxy', action='store_true',
                     help='Disable Cloudflare proxy fallback')
     ap.add_argument('--fake-tls-domain', type=str, default='',
@@ -622,8 +624,8 @@ def main():
     proxy_config.buffer_size = max(4, args.buf_kb) * 1024
     proxy_config.pool_size = max(0, args.pool_size)
     proxy_config.fallback_cfproxy = not args.no_cfproxy
-    proxy_config.cfproxy_user_domain = args.cfproxy_domain.strip()
-    proxy_config.cfproxy_worker_domain = args.cfproxy_worker_domain.strip()
+    proxy_config.cfproxy_user_domains = coerce_domain_list(args.cfproxy_domain)
+    proxy_config.cfproxy_worker_domains = coerce_domain_list(args.cfproxy_worker_domain)
     proxy_config.fake_tls_domain = args.fake_tls_domain.strip()
     proxy_config.proxy_protocol = args.proxy_protocol
 

@@ -114,16 +114,17 @@ class _CfWorkerPool:
     WS_POOL_MAX_AGE = 120.0
 
     def __init__(self):
-        self._idle: Dict[int, deque] = {}
-        self._refilling: Set[int] = set()
+        self._idle: Dict[Tuple[int, str], deque] = {}
+        self._refilling: Set[Tuple[int, str]] = set()
 
     async def get(self, dc: int, worker_domain: str, fallback_dst: str) -> Optional[RawWebSocket]:
         now = time.monotonic()
+        key = (dc, worker_domain)
 
-        bucket = self._idle.get(dc)
+        bucket = self._idle.get(key)
         if bucket is None:
             bucket = deque()
-            self._idle[dc] = bucket
+            self._idle[key] = bucket
         while bucket:
             ws, created = bucket.popleft()
             age = now - created
@@ -134,22 +135,23 @@ class _CfWorkerPool:
             stats.cf_pool_hits += 1
             log.debug("CF worker pool hit DC%d (age=%.1fs, left=%d)",
                       dc, age, len(bucket))
-            self._schedule_refill(dc, worker_domain, fallback_dst)
+            self._schedule_refill(key, fallback_dst)
             return ws
 
         stats.cf_pool_misses += 1
-        self._schedule_refill(dc, worker_domain, fallback_dst)
+        self._schedule_refill(key, fallback_dst)
         return None
 
-    def _schedule_refill(self, dc, worker_domain, fallback_dst):
-        if dc in self._refilling:
+    def _schedule_refill(self, key, fallback_dst):
+        if key in self._refilling:
             return
-        self._refilling.add(dc)
-        asyncio.create_task(self._refill(dc, worker_domain, fallback_dst))
+        self._refilling.add(key)
+        asyncio.create_task(self._refill(key, fallback_dst))
 
-    async def _refill(self, dc, worker_domain, fallback_dst):
+    async def _refill(self, key, fallback_dst):
+        dc, worker_domain = key
         try:
-            bucket = self._idle.setdefault(dc, deque())
+            bucket = self._idle.setdefault(key, deque())
             needed = proxy_config.pool_size - len(bucket)
             if needed <= 0:
                 return
@@ -166,7 +168,7 @@ class _CfWorkerPool:
             log.debug("CF worker pool refilled DC%d: %d ready",
                       dc, len(bucket))
         finally:
-            self._refilling.discard(dc)
+            self._refilling.discard(key)
 
     @staticmethod
     async def _connect_one(worker_domain, fallback_dst, dc) -> Optional[RawWebSocket]:
@@ -194,12 +196,13 @@ class _CfWorkerPool:
             if dc not in proxy_config.dc_redirects
         }
 
-        if not cf_fallbacks or not proxy_config.cfproxy_worker_domain:
+        if not cf_fallbacks or not proxy_config.cfproxy_worker_domains:
             return
-            
-        for dc, fallback_dst in cf_fallbacks.items():
-            self._schedule_refill(dc, proxy_config.cfproxy_worker_domain, fallback_dst)
-        
+
+        for worker_domain in proxy_config.cfproxy_worker_domains:
+            for dc, fallback_dst in cf_fallbacks.items():
+                self._schedule_refill((dc, worker_domain), fallback_dst)
+
         log.info("CF worker pool warmup started for %d DC(s)", len(cf_fallbacks))
 
     def reset(self):

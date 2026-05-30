@@ -133,11 +133,11 @@ async def do_fallback(reader, writer, relay_init, label,
                        ctx: CryptoCtx, splitter=None):
     fallback_dst = DC_DEFAULT_IPS.get(dc)
     use_cf = proxy_config.fallback_cfproxy
-    worker_domain = proxy_config.cfproxy_worker_domain
+    worker_domains = proxy_config.cfproxy_worker_domains
 
     methods: List[str] = []
 
-    if worker_domain and fallback_dst:
+    if worker_domains and fallback_dst:
         methods.append('cf_worker')
     if use_cf:
         methods.append('cf')
@@ -176,38 +176,40 @@ async def _cfproxy_worker_fallback(reader, writer, relay_init, label,
                                    fallback_dst: str,
                                    splitter=None):
     media_tag = ' media' if is_media else ''
-    worker_domain = proxy_config.cfproxy_worker_domain
-    if not worker_domain:
+    worker_domains = proxy_config.cfproxy_worker_domains
+    if not worker_domains:
         return False
 
-    ws = await cf_worker_pool.get(dc, worker_domain, fallback_dst)
-    if ws:
-        log.info("[%s] DC%d%s -> CF worker pool hit for %s",
-                 label, dc, media_tag, fallback_dst)
-    else:
-        query = urlencode({
-            'dst': fallback_dst,
-            'dc': str(dc),
-        })
-        path = f'/apiws?{query}'
+    for worker_domain in worker_domains:
+        ws = await cf_worker_pool.get(dc, worker_domain, fallback_dst)
+        if ws:
+            log.info("[%s] DC%d%s -> CF worker pool hit for %s",
+                     label, dc, media_tag, fallback_dst)
+        else:
+            query = urlencode({
+                'dst': fallback_dst,
+                'dc': str(dc),
+            })
+            path = f'/apiws?{query}'
 
-        log.info("[%s] DC%d%s -> trying CF worker for %s",
-                 label, dc, media_tag, fallback_dst)
+            log.info("[%s] DC%d%s -> trying CF worker %s for %s",
+                     label, dc, media_tag, worker_domain, fallback_dst)
 
-        try:
-            ws = await RawWebSocket.connect(worker_domain, worker_domain,
-                                            timeout=10.0, path=path)
-        except Exception as exc:
-            log.warning("[%s] DC%d%s CF worker failed: %s",
-                        label, dc, media_tag, repr(exc))
-            return False
+            try:
+                ws = await RawWebSocket.connect(worker_domain, worker_domain,
+                                                timeout=10.0, path=path)
+            except Exception as exc:
+                log.warning("[%s] DC%d%s CF worker %s failed: %s",
+                            label, dc, media_tag, worker_domain, repr(exc))
+                continue
 
-    stats.connections_cfproxy += 1
-    await ws.send(relay_init)
-    await bridge_ws_reencrypt(reader, writer, ws, label, ctx,
-                               dc=dc, is_media=is_media,
-                               splitter=splitter)
-    return True
+        stats.connections_cfproxy += 1
+        await ws.send(relay_init)
+        await bridge_ws_reencrypt(reader, writer, ws, label, ctx,
+                                   dc=dc, is_media=is_media,
+                                   splitter=splitter)
+        return True
+    return False
 
 
 async def _cfproxy_fallback(reader, writer, relay_init, label,
