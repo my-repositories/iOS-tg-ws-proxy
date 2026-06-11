@@ -56,6 +56,7 @@ tg-ws-proxy = "proxy.tg_ws_proxy:main"
 tg-ws-proxy-tray-win = "windows:main"
 tg-ws-proxy-tray-macos = "macos:main"
 tg-ws-proxy-tray-linux = "linux:main"
+tg-ws-proxy-cli-ios = "ios:main"
 
 [project.urls]
 Source = "https://github.com/Flowseal/tg-ws-proxy"
@@ -68,6 +69,7 @@ packages = ["proxy", "ui", "utils"]
 "windows.py" = "windows.py"
 "macos.py" = "macos.py"
 "linux.py" = "linux.py"
+"ios.py" = "ios.py"
 
 [tool.hatch.version]
 path = "proxy/__init__.py"
