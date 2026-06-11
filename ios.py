@@ -15,7 +15,7 @@ if not SECRET:
     sys.exit(1)
 
 # Запрашиваем IP и порт из переменных окружения
-BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
+BIND_HOST = os.getenv("BIND_HOST", "localhost")
 BIND_PORT = int(os.getenv("BIND_PORT", "1042"))
 
 # Пути импорта пакета proxy
