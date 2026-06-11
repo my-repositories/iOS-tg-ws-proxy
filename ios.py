@@ -37,15 +37,9 @@ SECRET_BYTES = binascii.unhexlify(CLEAN_SECRET_HEX)
 
 # Настройка жестких редиректов на рабочие IP серверов Telegram
 proxy_config.dc_redirects = {
-    1: '149.154.167.220',
     2: '149.154.167.220',
-    3: '149.154.167.220',
-    4: '149.154.167.220',
-    5: '149.154.167.220'
+    4: '149.154.167.220'
 }
-
-# Отключаем фолбек на Cloudflare, чтобы мобильная сессия не висла по таймауту
-proxy_config.fallback_cfproxy = False
 
 async def start_proxy():
     from proxy.tg_ws_proxy import _handle_client
