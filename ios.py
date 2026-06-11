@@ -45,9 +45,9 @@ SECRET_BYTES = binascii.unhexlify(CLEAN_SECRET_HEX)
 
 # Настройка жестких редиректов на рабочие IP серверов Telegram
 proxy_config.dc_redirects = {
-    2: '149.154.167.220',
-    4: '149.154.167.220',
-    203: '149.154.167.220'
+    # 2: '149.154.167.220',
+    # 4: '149.154.167.220',
+    # 203: '149.154.167.220'
 }
 
 async def start_proxy():
