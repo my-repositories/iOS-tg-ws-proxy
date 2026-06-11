@@ -4,12 +4,19 @@ import asyncio
 import logging
 import binascii
 
-# Проверяем, передан ли секрет через переменную окружения
-if "TG_SECRET" not in os.environ:
+# Запрашиваем секрет из переменной окружения
+SECRET = os.getenv("TG_SECRET")
+
+if not SECRET:
     print("\n[ОШИБКА] Не задан секретный ключ!")
     print("Запускай скрипт строго так:")
-    print("env TG_SECRET=ddedInside42 python3 ios.py\n")
+    print("export TG_SECRET=ddedInside42")
+    print("python3 ios.py\n")
     sys.exit(1)
+
+# Запрашиваем IP и порт из переменных окружения
+BIND_HOST = os.getenv("BIND_HOST", "0.0.0.0")
+BIND_PORT = int(os.getenv("BIND_PORT", "1042"))
 
 # Пути импорта пакета proxy
 _repo_root = os.path.dirname(os.path.abspath(__file__))
@@ -23,13 +30,14 @@ logging.basicConfig(
 )
 
 from proxy.config import proxy_config
-proxy_config.bind_host = "127.0.0.1"
-proxy_config.bind_port = 1042
+
+proxy_config.bind_host = BIND_HOST
+proxy_config.bind_port = BIND_PORT
 proxy_config.buffer_size = 32768
 proxy_config.proxy_protocol = False
 
-# Забираем секрет из переменной окружения (динамический ввод)
-proxy_config.secret = os.environ["TG_SECRET"]
+# Забираем секрет из переменной окружения
+proxy_config.secret = SECRET
 
 # Отрезаем префикс 'dd' для криптографического ядра
 CLEAN_SECRET_HEX = proxy_config.secret[2:]
@@ -53,6 +61,7 @@ async def start_proxy():
     
     print(f"\n=============================================")
     print(f" ДИНАМИЧЕСКИЙ КОНФИГ УСПЕШНО ЗАПУЩЕН НА iOS")
+    print(f" IP: {proxy_config.bind_host}")
     print(f" Порт: {proxy_config.bind_port}")
     print(f" Секрет: {proxy_config.secret}")
     print(f"=============================================\n")
